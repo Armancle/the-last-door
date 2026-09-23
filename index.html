@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backrooms Level 0 - Psychological Horror Prototype & Editor</title>
+  <meta name="description" content="A browser-based 3D psychological horror game prototype and level editor inspired by the Backrooms Level 0 aesthetic using Three.js.">
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js CDN fallback or module import -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.170.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Mode Navigation Header -->
+    <header id="mode-header">
+      <div class="logo">LEVEL 0 <span>// BACKROOMS</span></div>
+      <div class="mode-toggle">
+        <button id="btn-play-mode" class="active">PLAY MODE</button>
+        <button id="btn-editor-mode">LEVEL EDITOR</button>
+      </div>
+      <div class="hotkey-tip">Press <kbd>Tab</kbd> to toggle mode</div>
+    </header>
+
+    <!-- PLAY MODE HUD -->
+    <div id="hud-play" class="hud-layer">
+      <div id="crosshair"></div>
+      
+      <div id="stamina-container">
+        <div class="stamina-label">STAMINA</div>
+        <div class="stamina-bar">
+          <div id="stamina-fill"></div>
+        </div>
+      </div>
+
+      <div id="controls-hint">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
+        <span><kbd>Shift</kbd> Sprint</span>
+        <span><kbd>Ctrl</kbd> Crouch</span>
+        <span><kbd>Mouse</kbd> Look</span>
+      </div>
+    </div>
+
+    <!-- LEVEL EDITOR HUD -->
+    <div id="hud-editor" class="hud-layer" style="display: none;">
+      <!-- Left Sidebar: Object Palette -->
+      <aside id="editor-sidebar">
+        <h3>ADD OBJECTS</h3>
+        <button id="btn-add-wall" class="editor-btn">➕ Add Wall</button>
+        <button id="btn-add-light" class="editor-btn">💡 Add Light</button>
+        <button id="btn-add-pillar" class="editor-btn">🧱 Add Pillar</button>
+        <button id="btn-add-door" class="editor-btn">🚪 Add Door</button>
+        <button id="btn-add-prop" class="editor-btn">🪑 Add Prop</button>
+        <button id="btn-add-entity" class="editor-btn">👁️ Entity Spawn</button>
+        
+        <hr class="editor-divider">
+        
+        <h3>POSITIONS</h3>
+        <button id="btn-set-player-spawn" class="editor-btn accent-blue">📍 Set Player Spawn</button>
+        <button id="btn-set-exit" class="editor-btn accent-green">🚪 Set Exit Door</button>
+
+        <hr class="editor-divider">
+
+        <h3>OBJECT ACTIONS</h3>
+        <button id="btn-rotate-obj" class="editor-btn">🔄 Rotate (45°)</button>
+        <button id="btn-duplicate-obj" class="editor-btn">📋 Duplicate</button>
+        <button id="btn-delete-obj" class="editor-btn danger">🗑️ Delete</button>
+
+        <hr class="editor-divider">
+
+        <h3>FILE</h3>
+        <button id="btn-save-level" class="editor-btn success">💾 Save Level (JSON)</button>
+        <button id="btn-load-level" class="editor-btn">📂 Load Saved Level</button>
+        <button id="btn-reset-level" class="editor-btn warning">⚠️ Reset Default</button>
+      </aside>
+
+      <!-- Right Properties Panel -->
+      <div id="editor-inspector-panel">
+        <h4>INSPECTOR</h4>
+        <div id="editor-inspector">
+          <em>Click an object in the 3D view to select & edit.</em>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXIT REACHED MODAL OVERLAY -->
+    <div id="exit-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <h1 class="glitch-text">YOU FOUND THE EXIT</h1>
+        <p>You navigated the endless mono-yellow corridors and escaped Level 0.</p>
+        <div class="modal-actions">
+          <button id="btn-exit-editor" class="modal-btn">Return to Editor</button>
+          <button id="btn-exit-restart" class="modal-btn primary">Play Again</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
