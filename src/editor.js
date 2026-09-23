@@ -230,21 +230,21 @@ export class LevelEditor {
 
   saveLevel() {
     const jsonStr = JSON.stringify(this.currentLevelData, null, 2);
-    localStorage.setItem('backrooms_saved_level', jsonStr);
+    localStorage.setItem('the_last_door_saved_level', jsonStr);
 
     // Download JSON file download trigger
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'backrooms_level.json';
+    a.download = 'the_last_door_level.json';
     a.click();
     URL.revokeObjectURL(url);
     alert('Level configuration saved to LocalStorage & downloaded as JSON!');
   }
 
   loadLevel() {
-    const saved = localStorage.getItem('backrooms_saved_level');
+    const saved = localStorage.getItem('the_last_door_saved_level');
     if (saved) {
       this.currentLevelData = JSON.parse(saved);
       this.world.loadLevel(this.currentLevelData);

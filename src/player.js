@@ -37,7 +37,40 @@ export class PlayerController {
     // Footstep Sound Timer
     this.footstepTimer = 0;
 
+    // Flashlight Setup
+    this.flashlightOn = true;
+    this.initFlashlight();
+
     this.initControls();
+  }
+
+  initFlashlight() {
+    // 3D SpotLight attached to player camera
+    this.flashlight = new THREE.SpotLight(0xfff5ea, 5.0, 40, Math.PI / 6, 0.4, 1.8);
+    this.flashlight.position.set(0.25, -0.2, 0.1);
+
+    this.flashlightTarget = new THREE.Object3D();
+    this.flashlightTarget.position.set(0, 0, -5);
+
+    this.camera.add(this.flashlightTarget);
+    this.flashlight.target = this.flashlightTarget;
+    this.camera.add(this.flashlight);
+
+    if (this.world && this.world.scene && !this.camera.parent) {
+      this.world.scene.add(this.camera);
+    }
+  }
+
+  toggleFlashlight() {
+    this.flashlightOn = !this.flashlightOn;
+    this.flashlight.visible = this.flashlightOn;
+    audioEngine.playFlashlightClick();
+
+    const statusEl = document.getElementById('flashlight-status');
+    if (statusEl) {
+      statusEl.textContent = this.flashlightOn ? 'ON' : 'OFF';
+      statusEl.className = this.flashlightOn ? 'status-on' : 'status-off';
+    }
   }
 
   initControls() {
@@ -64,25 +97,32 @@ export class PlayerController {
   onKeyDown(event) {
     if (!this.isLocked) return;
 
-    switch (event.code) {
-      case 'KeyW': case 'ArrowUp': this.keys.forward = true; break;
-      case 'KeyS': case 'ArrowDown': this.keys.backward = true; break;
-      case 'KeyA': case 'ArrowLeft': this.keys.left = true; break;
-      case 'KeyD': case 'ArrowRight': this.keys.right = true; break;
-      case 'ShiftLeft': case 'ShiftRight': this.keys.sprint = true; break;
-      case 'ControlLeft': case 'ControlRight': case 'KeyC': this.keys.crouch = true; break;
+    const code = event.code;
+    const key = event.key ? event.key.toLowerCase() : '';
+
+    if (code === 'KeyF' || key === 'f') {
+      this.toggleFlashlight();
+      return;
     }
+
+    if (code === 'KeyW' || code === 'ArrowUp' || key === 'w') this.keys.forward = true;
+    else if (code === 'KeyS' || code === 'ArrowDown' || key === 's') this.keys.backward = true;
+    else if (code === 'KeyA' || code === 'ArrowLeft' || key === 'a') this.keys.left = true;
+    else if (code === 'KeyD' || code === 'ArrowRight' || key === 'd') this.keys.right = true;
+    else if (code === 'ShiftLeft' || code === 'ShiftRight' || key === 'shift') this.keys.sprint = true;
+    else if (code === 'ControlLeft' || code === 'ControlRight' || code === 'KeyC' || key === 'c' || key === 'control') this.keys.crouch = true;
   }
 
   onKeyUp(event) {
-    switch (event.code) {
-      case 'KeyW': case 'ArrowUp': this.keys.forward = false; break;
-      case 'KeyS': case 'ArrowDown': this.keys.backward = false; break;
-      case 'KeyA': case 'ArrowLeft': this.keys.left = false; break;
-      case 'KeyD': case 'ArrowRight': this.keys.right = false; break;
-      case 'ShiftLeft': case 'ShiftRight': this.keys.sprint = false; break;
-      case 'ControlLeft': case 'ControlRight': case 'KeyC': this.keys.crouch = false; break;
-    }
+    const code = event.code;
+    const key = event.key ? event.key.toLowerCase() : '';
+
+    if (code === 'KeyW' || code === 'ArrowUp' || key === 'w') this.keys.forward = false;
+    else if (code === 'KeyS' || code === 'ArrowDown' || key === 's') this.keys.backward = false;
+    else if (code === 'KeyA' || code === 'ArrowLeft' || key === 'a') this.keys.left = false;
+    else if (code === 'KeyD' || code === 'ArrowRight' || key === 'd') this.keys.right = false;
+    else if (code === 'ShiftLeft' || code === 'ShiftRight' || key === 'shift') this.keys.sprint = false;
+    else if (code === 'ControlLeft' || code === 'ControlRight' || code === 'KeyC' || key === 'c' || key === 'control') this.keys.crouch = false;
   }
 
   onMouseMove(event) {
@@ -131,10 +171,11 @@ export class PlayerController {
     if (this.keys.right) this.direction.x += 1;
     this.direction.normalize();
 
-    // Transform direction to match player camera Y rotation
-    const cameraRotationY = this.euler.y;
-    const moveX = (this.direction.x * Math.cos(cameraRotationY) - this.direction.z * Math.sin(cameraRotationY)) * currentSpeed * delta;
-    const moveZ = (this.direction.x * Math.sin(cameraRotationY) + this.direction.z * Math.cos(cameraRotationY)) * currentSpeed * delta;
+    // Transform direction to match player camera Y rotation accurately
+    const moveVector = this.direction.clone();
+    moveVector.applyEuler(new THREE.Euler(0, this.euler.y, 0, 'YXZ'));
+    const moveX = moveVector.x * currentSpeed * delta;
+    const moveZ = moveVector.z * currentSpeed * delta;
 
     // Proposed New Position with Axis-Independent Collision Detection
     const newPos = this.position.clone();

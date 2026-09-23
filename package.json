@@ -1,7 +1,7 @@
 {
-  "name": "backrooms-level0",
+  "name": "the-last-door",
   "version": "1.0.0",
-  "description": "3D Psychological Horror Backrooms Level 0 Browser Game & Level Editor",
+  "description": "3D Psychological Horror Browser Game & Level Editor - The Last Door",
   "main": "index.html",
   "type": "module",
   "scripts": {
