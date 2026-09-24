@@ -5,16 +5,19 @@ import {
   createCarpetTexture,
   createCeilingTexture,
   createRedDoorTexture,
-  createRedDoorBumpTexture
+  createRedDoorBumpTexture,
+  createBlueDoorTexture
 } from './textures.js';
 import { EntitySystem } from './entity.js';
 import { LightingManager } from './lighting.js';
 import { AtmosphereManager } from './atmosphere.js';
+import { DreamcoreWorld } from './dreamcore.js';
 
 export class World {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
+    this.currentDimension = 'main';
 
     // High Performance Renderer Setup
     this.renderer = new THREE.WebGLRenderer({
@@ -29,7 +32,7 @@ export class World {
     this.container.appendChild(this.renderer.domElement);
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
 
     // Atmosphere & Lighting Managers
     this.atmosphereManager = new AtmosphereManager(this.scene);
@@ -41,6 +44,7 @@ export class World {
     this.ceilingTex = createCeilingTexture();
     this.redDoorTex = createRedDoorTexture();
     this.redDoorBumpTex = createRedDoorBumpTexture();
+    this.blueDoorTex = createBlueDoorTexture();
 
     this.materials = {
       wall: new THREE.MeshStandardMaterial({
@@ -69,15 +73,32 @@ export class World {
         roughness: 0.75,
         metalness: 0.12
       }),
+      blueDoor: new THREE.MeshStandardMaterial({
+        map: this.blueDoorTex,
+        bumpMap: this.redDoorBumpTex,
+        bumpScale: 0.03,
+        roughness: 0.5,
+        metalness: 0.2
+      }),
       doorFrame: new THREE.MeshStandardMaterial({
         color: 0x3d2b1f,
         roughness: 0.8,
         metalness: 0.1
       }),
+      blueDoorFrame: new THREE.MeshStandardMaterial({
+        color: 0x0a2436,
+        roughness: 0.6,
+        metalness: 0.3
+      }),
       doorHandle: new THREE.MeshStandardMaterial({
         color: 0xb59a57,
         roughness: 0.35,
         metalness: 0.85
+      }),
+      silverHandle: new THREE.MeshStandardMaterial({
+        color: 0xd0d0d0,
+        roughness: 0.2,
+        metalness: 0.9
       }),
       prop: new THREE.MeshStandardMaterial({
         color: 0x3d352c,
@@ -100,7 +121,9 @@ export class World {
     this.scene.add(this.objectsGroup);
     
     this.colliders = [];
+    this.blueDoorObjects = [];
     this.entitySystem = new EntitySystem(this.scene);
+    this.dreamcoreWorld = null;
 
     // Environment Meshes
     this.floorMesh = null;
@@ -133,11 +156,17 @@ export class World {
   }
 
   loadLevel(levelData) {
+    this.currentDimension = 'main';
+    if (this.dreamcoreWorld) {
+      this.dreamcoreWorld.clear();
+    }
+
     while (this.objectsGroup.children.length > 0) {
       const child = this.objectsGroup.children[0];
       this.objectsGroup.remove(child);
     }
     this.colliders = [];
+    this.blueDoorObjects = [];
     this.entitySystem.clear();
 
     this.buildEnvironment(60, 60);
@@ -159,6 +188,30 @@ export class World {
     }
   }
 
+  loadDreamcoreDimension() {
+    this.currentDimension = 'dreamcore';
+
+    // Clear main level objects & environment
+    while (this.objectsGroup.children.length > 0) {
+      this.objectsGroup.remove(this.objectsGroup.children[0]);
+    }
+    if (this.floorMesh) this.scene.remove(this.floorMesh);
+    if (this.ceilingMesh) this.scene.remove(this.ceilingMesh);
+    this.lightingManager.clear();
+    this.entitySystem.clear();
+    this.colliders = [];
+
+    // Build Dreamcore Connected World
+    this.dreamcoreWorld = new DreamcoreWorld(this.scene);
+    const data = this.dreamcoreWorld.build();
+
+    this.colliders = data.colliders;
+    this.blueDoorObjects = data.blueDoors;
+
+    // Apply Dreamcore Atmospheric Lighting & Fog
+    this.atmosphereManager.applySettings(CONFIG.DREAMCORE_ATMOSPHERE);
+  }
+
   createObjectInWorld(data) {
     let mesh = null;
 
@@ -176,20 +229,33 @@ export class World {
       case 'door': {
         const group = new THREE.Group();
 
+        const isBlue = !!data.isBlueDoor;
+        const frameMat = isBlue ? this.materials.blueDoorFrame : this.materials.doorFrame;
+        const panelMat = isBlue ? this.materials.blueDoor : this.materials.redDoor;
+        const handleMat = isBlue ? this.materials.silverHandle : this.materials.doorHandle;
+
         const frameGeo = new THREE.BoxGeometry(1.6, 2.6, 0.2);
-        const frame = new THREE.Mesh(frameGeo, this.materials.doorFrame);
+        const frame = new THREE.Mesh(frameGeo, frameMat);
         frame.position.y = 1.3;
         group.add(frame);
 
         const panelGeo = new THREE.BoxGeometry(1.4, 2.4, 0.12);
-        const panel = new THREE.Mesh(panelGeo, this.materials.redDoor);
+        const panel = new THREE.Mesh(panelGeo, panelMat);
         panel.position.set(0, 1.3, 0.01);
         group.add(panel);
 
         const handleGeo = new THREE.SphereGeometry(0.06, 10, 10);
-        const handle = new THREE.Mesh(handleGeo, this.materials.doorHandle);
+        const handle = new THREE.Mesh(handleGeo, handleMat);
         handle.position.set(0.55, 1.2, 0.1);
         group.add(handle);
+
+        if (isBlue) {
+          // Subtle glowing cyan backlight above blue door
+          const doorLight = new THREE.PointLight(0x00b4ff, 1.5, 6);
+          doorLight.position.set(0, 2.4, 0.4);
+          group.add(doorLight);
+          this.blueDoorObjects.push(group);
+        }
 
         mesh = group;
         break;
@@ -253,9 +319,14 @@ export class World {
   }
 
   update(time, delta, playerPos) {
-    this.atmosphereManager.update(delta);
-    this.lightingManager.update(delta, playerPos);
-    this.entitySystem.update(time);
+    if (this.currentDimension === 'dreamcore' && this.dreamcoreWorld) {
+      this.dreamcoreWorld.update(time, delta, playerPos);
+      this.atmosphereManager.update(delta);
+    } else {
+      this.atmosphereManager.update(delta);
+      this.lightingManager.update(delta, playerPos);
+      this.entitySystem.update(time);
+    }
   }
 
   onWindowResize() {
@@ -265,3 +336,4 @@ export class World {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
   }
 }
+

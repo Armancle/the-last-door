@@ -39,11 +39,44 @@ class GameApp {
       );
     }
 
+    // Blue Door Interaction Event Handler
+    this.player.onInteractDoor = (doorGroup) => this.handleDoorInteraction(doorGroup);
+
     this.initUI();
 
     // Start Game Loop
     this.clock = new THREE.Clock();
     this.animate();
+  }
+
+  handleDoorInteraction(doorGroup) {
+    const fadeOverlay = document.getElementById('fade-overlay');
+    if (fadeOverlay) fadeOverlay.classList.add('active');
+
+    // Play subtle interaction click/sound
+    audioEngine.playFlashlightClick();
+
+    setTimeout(() => {
+      if (this.world.currentDimension === 'main') {
+        // Transition from Main Room -> Dreamcore Dimension
+        this.world.loadDreamcoreDimension();
+        this.player.setPosition(0, 1.7, 0);
+        this.player.euler.set(0, 0, 0, 'YXZ');
+      } else {
+        // Return from Dreamcore -> Main Room
+        this.world.loadLevel(this.activeLevelData);
+        this.player.setPosition(0, 1.7, 22.0);
+        this.player.euler.set(0, Math.PI, 0, 'YXZ');
+      }
+
+      // Update postprocessor camera reference
+      this.postProcessor.setCamera(this.world.camera);
+
+      // Fade screen back in
+      setTimeout(() => {
+        if (fadeOverlay) fadeOverlay.classList.remove('active');
+      }, 100);
+    }, 400);
   }
 
   initUI() {
@@ -81,10 +114,12 @@ class GameApp {
 
     // Render First Person Camera with Post Processing
     this.postProcessor.setCamera(this.world.camera);
-    this.postProcessor.render(elapsedTime);
+    this.postProcessor.render(elapsedTime, this.world.currentDimension);
 
-    // Check Exit Trigger Condition
-    this.checkExitTrigger();
+    // Check Exit Trigger Condition (Main Room only)
+    if (this.world.currentDimension === 'main') {
+      this.checkExitTrigger();
+    }
   }
 
   checkExitTrigger() {

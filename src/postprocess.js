@@ -8,6 +8,7 @@ export const FastHorrorAtmosphereShader = {
   uniforms: {
     'tDiffuse': { value: null },
     'time': { value: 0 },
+    'dimensionType': { value: 0.0 }, // 0.0 = Main Room Yellow, 1.0 = Dreamcore Teal/Green
     'vignetteDarkness': { value: CONFIG.ATMOSPHERE.VIGNETTE_STRENGTH },
     'grainIntensity': { value: CONFIG.ATMOSPHERE.GRAIN_STRENGTH }
   },
@@ -21,6 +22,7 @@ export const FastHorrorAtmosphereShader = {
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform float time;
+    uniform float dimensionType;
     uniform float vignetteDarkness;
     uniform float grainIntensity;
     varying vec2 vUv;
@@ -34,25 +36,34 @@ export const FastHorrorAtmosphereShader = {
       vec4 texColor = texture2D(tDiffuse, uv);
       vec3 color = texColor.rgb;
 
-      // 1. Fast Light Panel Glow (Matches glowing square lights in reference photo)
+      // 1. Fast Light Panel Glow
       float luminance = dot(color, vec3(0.299, 0.587, 0.114));
       if (luminance > 0.75) {
         color += (color - 0.75) * 0.45;
       }
 
-      // 2. Subtle Corner Vignette
+      // 2. Subtle Corner Vignette (Reduced in Dreamcore)
       vec2 distFromCenter = uv - vec2(0.5);
       float dist = length(distFromCenter);
-      float vignette = smoothstep(0.85, 0.25, dist * vignetteDarkness);
+      float effectiveVignette = (dimensionType > 0.5) ? vignetteDarkness * 0.3 : vignetteDarkness;
+      float vignette = smoothstep(0.85, 0.25, dist * effectiveVignette);
       color *= vignette;
 
       // 3. VHS Camera Grain
       float noise = (rand(uv + vec2(time * 0.04)) - 0.5) * grainIntensity;
       color += noise;
 
-      // 4. Iconic Backrooms Yellow VHS Color Grading (Matching reference image)
-      vec3 warmTint = color * vec3(1.08, 1.05, 0.88);
-      color = mix(color, warmTint, 0.35);
+      // 4. Dynamic Dimension Color Grading
+      if (dimensionType > 0.5) {
+        // Bright Dreamcore Artificial Lighting Tint (Reference 2)
+        color *= 1.28; // Bright artificial light boost
+        vec3 tealTint = color * vec3(0.95, 1.08, 1.04);
+        color = mix(color, tealTint, 0.25);
+      } else {
+        // Iconic Backrooms Yellow VHS Tint
+        vec3 warmTint = color * vec3(1.08, 1.05, 0.88);
+        color = mix(color, warmTint, 0.35);
+      }
 
       gl_FragColor = vec4(color, texColor.a);
     }
@@ -75,10 +86,13 @@ export class AtmospherePostProcessor {
     this.composer.addPass(this.atmospherePass);
   }
 
-  render(time) {
+  render(time, dimension = 'main') {
     if (this.enabled) {
       if (this.atmospherePass.uniforms['time']) {
         this.atmospherePass.uniforms['time'].value = time;
+      }
+      if (this.atmospherePass.uniforms['dimensionType']) {
+        this.atmospherePass.uniforms['dimensionType'].value = (dimension === 'dreamcore') ? 1.0 : 0.0;
       }
       this.composer.render();
     } else {

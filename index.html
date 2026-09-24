@@ -31,6 +31,9 @@
     <div id="hud-play" class="hud-layer">
       <div id="crosshair"></div>
       
+      <!-- Interaction Prompt -->
+      <div id="interaction-prompt" class="interaction-prompt" style="display: none;">[E] Enter Dreamcore</div>
+
       <div id="stamina-container">
         <div class="stamina-label">STAMINA</div>
         <div class="stamina-bar">
@@ -48,9 +51,13 @@
         <span><kbd>Shift</kbd> Sprint</span>
         <span><kbd>Ctrl</kbd> Crouch</span>
         <span><kbd>F</kbd> Flashlight</span>
+        <span><kbd>E</kbd> Interact</span>
         <span><kbd>Mouse</kbd> Look</span>
       </div>
     </div>
+
+    <!-- Fade Transition Overlay -->
+    <div id="fade-overlay" class="fade-overlay"></div>
 
     <!-- EXIT REACHED MODAL OVERLAY -->
     <div id="exit-modal" class="modal-overlay" style="display: none;">

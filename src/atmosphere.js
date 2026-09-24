@@ -13,6 +13,11 @@ export class AtmosphereManager {
     );
     this.scene.add(this.ambientLight);
 
+    // Artificial Overhead Hemisphere Light (Simulates bright room ceiling reflection)
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0xb8d0c8, 0.0);
+    this.hemiLight.position.set(0, 10, 0);
+    this.scene.add(this.hemiLight);
+
     // Exponential Fog Setup (Subtle murky distance fog)
     this.scene.background = new THREE.Color(CONFIG.ATMOSPHERE.FOG_COLOR);
     this.scene.fog = new THREE.FogExp2(
@@ -52,6 +57,14 @@ export class AtmosphereManager {
     if (envData.ambientIntensity !== undefined) {
       this.settings.ambientIntensity = envData.ambientIntensity;
       this.ambientLight.intensity = envData.ambientIntensity;
+    }
+
+    if (envData.HEMI_INTENSITY !== undefined) {
+      this.hemiLight.color.setStyle(envData.HEMI_SKY || "#ffffff");
+      this.hemiLight.groundColor.setStyle(envData.HEMI_GROUND || "#c2d6ce");
+      this.hemiLight.intensity = envData.HEMI_INTENSITY;
+    } else {
+      this.hemiLight.intensity = 0.0;
     }
   }
 

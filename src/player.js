@@ -20,6 +20,10 @@ export class PlayerController {
     this.targetHeight = CONFIG.PLAYER.HEIGHT;
     this.currentHeight = CONFIG.PLAYER.HEIGHT;
 
+    // Interaction Callback
+    this.onInteractDoor = null;
+    this.interactCooldown = false;
+
     // Input States
     this.keys = {
       forward: false,
@@ -112,12 +116,48 @@ export class PlayerController {
       return;
     }
 
+    if (code === 'KeyE' || key === 'e') {
+      this.triggerInteraction();
+      return;
+    }
+
     if (code === 'KeyW' || code === 'ArrowUp' || key === 'w') this.keys.forward = true;
     else if (code === 'KeyS' || code === 'ArrowDown' || key === 's') this.keys.backward = true;
     else if (code === 'KeyA' || code === 'ArrowLeft' || key === 'a') this.keys.left = true;
     else if (code === 'KeyD' || code === 'ArrowRight' || key === 'd') this.keys.right = true;
     else if (code === 'ShiftLeft' || code === 'ShiftRight' || key === 'shift') this.keys.sprint = true;
     else if (code === 'ControlLeft' || code === 'ControlRight' || code === 'KeyC' || key === 'c' || key === 'control') this.keys.crouch = true;
+  }
+
+  triggerInteraction() {
+    if (this.interactCooldown) return;
+    const door = this.checkDoorInteraction();
+    if (door && this.onInteractDoor) {
+      this.interactCooldown = true;
+      this.onInteractDoor(door);
+      setTimeout(() => { this.interactCooldown = false; }, 1200);
+    }
+  }
+
+  checkDoorInteraction() {
+    if (!this.world || !this.world.blueDoorObjects || this.world.blueDoorObjects.length === 0) return null;
+    
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+
+    for (const doorGroup of this.world.blueDoorObjects) {
+      const doorWorldPos = new THREE.Vector3();
+      doorGroup.getWorldPosition(doorWorldPos);
+      const dist = this.position.distanceTo(doorWorldPos);
+
+      if (dist < 4.0) {
+        const intersects = raycaster.intersectObject(doorGroup, true);
+        if (intersects.length > 0) {
+          return doorGroup;
+        }
+      }
+    }
+    return null;
   }
 
   onKeyUp(event) {
@@ -255,6 +295,26 @@ export class PlayerController {
     const staminaBar = document.getElementById('stamina-fill');
     if (staminaBar) {
       staminaBar.style.width = `${(this.stamina / CONFIG.PLAYER.STAMINA_MAX) * 100}%`;
+    }
+
+    // Blue Door Interaction Raycast & Proximity Prompt UI
+    const targetDoor = this.checkDoorInteraction();
+    const promptEl = document.getElementById('interaction-prompt');
+    if (promptEl) {
+      if (targetDoor) {
+        const isReturn = targetDoor.userData && targetDoor.userData.isReturnDoor;
+        promptEl.textContent = isReturn ? '[E] Return to Main Room' : '[E] Enter Dreamcore';
+        promptEl.style.display = 'block';
+
+        // Proximity trigger if walking directly up to the door
+        const doorWorldPos = new THREE.Vector3();
+        targetDoor.getWorldPosition(doorWorldPos);
+        if (this.position.distanceTo(doorWorldPos) < 1.6 && !this.interactCooldown) {
+          this.triggerInteraction();
+        }
+      } else {
+        promptEl.style.display = 'none';
+      }
     }
   }
 

@@ -37,6 +37,17 @@ export const CONFIG = {
     FOOTSTEP_INTERVAL_WALK: 0.48,
     FOOTSTEP_INTERVAL_SPRINT: 0.30,
     FOOTSTEP_INTERVAL_CROUCH: 0.68
+  },
+
+  // Dreamcore Bright Artificial Environment Config (Matching Reference Image 2)
+  DREAMCORE_ATMOSPHERE: {
+    FOG_COLOR: "#d6e8e2",
+    FOG_DENSITY: 0.002, // Ultra-clear distant visibility
+    AMBIENT_COLOR: "#ffffff",
+    AMBIENT_INTENSITY: 2.2, // High artificial brightness
+    HEMI_SKY: "#ffffff",
+    HEMI_GROUND: "#c2d6ce",
+    HEMI_INTENSITY: 1.8
   }
 };
 
@@ -73,6 +84,9 @@ export const DEFAULT_LEVEL = {
     { id: "pillar_4", type: "pillar", x: -12, y: 1.5, z: 2, scaleX: 2.2, scaleY: 3, scaleZ: 2.2, rotationY: 0 },
     { id: "pillar_5", type: "pillar", x: 14, y: 1.5, z: -14, scaleX: 2.2, scaleY: 3, scaleZ: 2.2, rotationY: 0 },
     { id: "pillar_6", type: "pillar", x: -16, y: 1.5, z: -16, scaleX: 2.2, scaleY: 3, scaleZ: 2.2, rotationY: 0 },
+
+    // Permanent BLUE DOOR (Entrance to the DREAMCORE Dimension)
+    { id: "door_blue_dreamcore", type: "door", x: 0, y: 0, z: 24.6, scaleX: 1.6, scaleY: 2.6, scaleZ: 0.2, rotationY: Math.PI, isBlueDoor: true },
 
     // Red Door (The iconic Red Door of The Last Door)
     { id: "door_red_1", type: "door", x: 8, y: 0, z: -1, scaleX: 1.6, scaleY: 2.6, scaleZ: 0.2, rotationY: 0, isRedDoor: true },

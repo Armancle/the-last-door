@@ -252,3 +252,42 @@ kbd {
 .modal-btn:hover {
   transform: translateY(-2px);
 }
+
+/* Interaction Prompt Overlay */
+.interaction-prompt {
+  position: absolute;
+  top: 56%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 30, 45, 0.85);
+  border: 1px solid rgba(0, 180, 255, 0.6);
+  box-shadow: 0 0 12px rgba(0, 180, 255, 0.4);
+  color: #aae5ff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 8px 18px;
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  z-index: 50;
+  transition: opacity 0.2s ease;
+}
+
+/* Atmospheric Fade Overlay */
+.fade-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #030a0d;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 900;
+  transition: opacity 0.4s ease-in-out;
+}
+
+.fade-overlay.active {
+  opacity: 1;
+}
