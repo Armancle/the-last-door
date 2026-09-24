@@ -9,7 +9,7 @@ export class LevelEditor {
     this.active = false;
     this.currentLevelData = JSON.parse(JSON.stringify(DEFAULT_LEVEL));
     
-    // Editor Raycaster & Mouse Selection
+    // Raycaster & Mouse Selection
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.selectedObject = null;
@@ -36,7 +36,7 @@ export class LevelEditor {
   }
 
   initUI() {
-    // Bind Editor Sidebar Action Buttons
+    // Sidebar Action Buttons
     document.getElementById('btn-add-wall')?.addEventListener('click', () => this.addObject('wall'));
     document.getElementById('btn-add-light')?.addEventListener('click', () => this.addObject('light'));
     document.getElementById('btn-add-pillar')?.addEventListener('click', () => this.addObject('pillar'));
@@ -46,17 +46,23 @@ export class LevelEditor {
     document.getElementById('btn-set-player-spawn')?.addEventListener('click', () => this.setPlayerSpawn());
     document.getElementById('btn-set-exit')?.addEventListener('click', () => this.setExit());
 
-    // Object Modifier Actions
+    // Object Modifiers
     document.getElementById('btn-delete-obj')?.addEventListener('click', () => this.deleteSelectedObject());
     document.getElementById('btn-duplicate-obj')?.addEventListener('click', () => this.duplicateSelectedObject());
     document.getElementById('btn-rotate-obj')?.addEventListener('click', () => this.rotateSelectedObject());
 
-    // Save & Load
+    // Atmosphere Controls
+    document.getElementById('input-fog-density')?.addEventListener('input', (e) => this.updateEnvironmentSetting('fogDensity', parseFloat(e.target.value)));
+    document.getElementById('input-fog-color')?.addEventListener('input', (e) => this.updateEnvironmentSetting('fogColor', e.target.value));
+    document.getElementById('input-ambient-intensity')?.addEventListener('input', (e) => this.updateEnvironmentSetting('ambientIntensity', parseFloat(e.target.value)));
+    document.getElementById('input-ambient-color')?.addEventListener('input', (e) => this.updateEnvironmentSetting('ambientColor', e.target.value));
+
+    // File Operations
     document.getElementById('btn-save-level')?.addEventListener('click', () => this.saveLevel());
     document.getElementById('btn-load-level')?.addEventListener('click', () => this.loadLevel());
     document.getElementById('btn-reset-level')?.addEventListener('click', () => this.resetToDefaultLevel());
 
-    // Canvas Mouse Click Picker & Orbit Camera Events
+    // Canvas Events
     window.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     window.addEventListener('pointermove', (e) => this.onPointerMove(e));
     window.addEventListener('pointerup', () => this.isDragging = false);
@@ -66,16 +72,41 @@ export class LevelEditor {
   activate() {
     this.active = true;
     this.world.loadLevel(this.currentLevelData);
+    this.syncEnvironmentUI();
   }
 
   deactivate() {
     this.active = false;
     this.deselectObject();
-    this.selectionBox.visible = false;
+    if (this.selectionBox) this.selectionBox.visible = false;
+  }
+
+  syncEnvironmentUI() {
+    const env = this.currentLevelData.environment || {};
+    const densityEl = document.getElementById('input-fog-density');
+    const colorEl = document.getElementById('input-fog-color');
+    const ambIntEl = document.getElementById('input-ambient-intensity');
+    const ambColEl = document.getElementById('input-ambient-color');
+
+    if (densityEl) densityEl.value = env.fogDensity || 0.038;
+    if (colorEl) colorEl.value = env.fogColor || "#221e15";
+    if (ambIntEl) ambIntEl.value = env.ambientIntensity || 0.38;
+    if (ambColEl) ambColEl.value = env.ambientColor || "#3d3829";
+  }
+
+  updateEnvironmentSetting(key, value) {
+    if (!this.currentLevelData.environment) {
+      this.currentLevelData.environment = {};
+    }
+    this.currentLevelData.environment[key] = value;
+    if (this.world && this.world.atmosphereManager) {
+      this.world.atmosphereManager.applySettings(this.currentLevelData.environment);
+    }
+    this.onLevelChange(this.currentLevelData);
   }
 
   onPointerDown(e) {
-    if (!this.active || e.target.tagName !== 'CANVAS') return;
+    if (!this.active || !e.target || e.target.tagName !== 'CANVAS') return;
 
     if (e.button === 0) { // Left Click Select
       this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -86,14 +117,16 @@ export class LevelEditor {
 
       if (intersects.length > 0) {
         let target = intersects[0].object;
-        while (target.parent && target.parent !== this.world.objectsGroup) {
+        while (target && target.parent && target.parent !== this.world.objectsGroup) {
           target = target.parent;
         }
-        this.selectObject(target);
+        if (target) {
+          this.selectObject(target);
+        }
       } else {
         this.deselectObject();
       }
-    } else if (e.button === 2 || e.button === 1) { // Right or Middle Mouse Camera Orbit
+    } else if (e.button === 2 || e.button === 1) { // Right/Middle Mouse Orbit
       this.isDragging = true;
       this.previousMousePosition = { x: e.clientX, y: e.clientY };
     }
@@ -105,7 +138,6 @@ export class LevelEditor {
     const deltaX = e.clientX - this.previousMousePosition.x;
     const deltaY = e.clientY - this.previousMousePosition.y;
 
-    // Orbit Editor Camera around center
     const rotSpeed = 0.005;
     this.editorCamera.position.x += deltaX * rotSpeed * 2;
     this.editorCamera.position.z += deltaY * rotSpeed * 2;
@@ -116,7 +148,6 @@ export class LevelEditor {
 
   onWheel(e) {
     if (!this.active) return;
-    // Zoom Editor Camera
     const zoomSpeed = 0.05;
     this.editorCamera.position.y = Math.max(5, Math.min(80, this.editorCamera.position.y + e.deltaY * zoomSpeed));
     this.editorCamera.lookAt(0, 0, 0);
@@ -125,7 +156,7 @@ export class LevelEditor {
   selectObject(mesh) {
     this.selectedObject = mesh;
     if (!mesh) {
-      this.selectionBox.visible = false;
+      if (this.selectionBox) this.selectionBox.visible = false;
       return;
     }
 
@@ -135,24 +166,105 @@ export class LevelEditor {
     const center = new THREE.Vector3();
     box.getCenter(center);
 
-    this.selectionBox.scale.copy(size.addScalar(0.1));
-    this.selectionBox.position.copy(center);
-    this.selectionBox.visible = true;
+    if (this.selectionBox) {
+      this.selectionBox.scale.copy(size.addScalar(0.1));
+      this.selectionBox.position.copy(center);
+      this.selectionBox.visible = true;
+    }
 
-    // Update Sidebar Properties Panel
     const inspectorEl = document.getElementById('editor-inspector');
-    if (inspectorEl && mesh.userData) {
-      inspectorEl.innerHTML = `
-        <strong>Selected Object:</strong> ${mesh.userData.type || 'Object'}<br>
-        ID: <code>${mesh.userData.id || 'N/A'}</code><br>
-        Pos X: <code>${mesh.position.x.toFixed(1)}</code> | Z: <code>${mesh.position.z.toFixed(1)}</code>
+    if (!inspectorEl || !mesh.userData) return;
+
+    const data = mesh.userData;
+
+    let html = `
+      <strong>Selected:</strong> ${(data.type || 'OBJECT').toUpperCase()}<br>
+      ID: <code>${data.id || 'N/A'}</code><br>
+      Pos: <code>(${mesh.position.x.toFixed(1)}, ${mesh.position.z.toFixed(1)})</code>
+      <hr class="editor-divider">
+    `;
+
+    if (data.type === 'light') {
+      const item = this.currentLevelData.objects.find(o => o.id === data.id);
+      const intensity = item?.intensity !== undefined ? item.intensity : 2.8;
+      const color = item?.color || "#fff5d6";
+      const range = item?.range !== undefined ? item.range : 20;
+      const flickerEnabled = item?.flickerEnabled !== undefined ? item.flickerEnabled : (item?.flicker || false);
+      const flickerChance = item?.flickerChance !== undefined ? item.flickerChance : 0.08;
+      const state = item?.state || 'NORMAL';
+
+      html += `
+        <div class="inspector-field">
+          <label>Light State:</label>
+          <select id="insp-light-state">
+            <option value="NORMAL" ${state === 'NORMAL' ? 'selected' : ''}>NORMAL</option>
+            <option value="FLICKERING" ${state === 'FLICKERING' ? 'selected' : ''}>FLICKERING</option>
+            <option value="DIM" ${state === 'DIM' ? 'selected' : ''}>DIM</option>
+            <option value="OFF" ${state === 'OFF' ? 'selected' : ''}>OFF</option>
+          </select>
+        </div>
+        <div class="inspector-field">
+          <label>Flicker ON/OFF:</label>
+          <input type="checkbox" id="insp-light-flicker" ${flickerEnabled ? 'checked' : ''}>
+        </div>
+        <div class="inspector-field">
+          <label>Flicker Chance:</label>
+          <input type="range" id="insp-light-chance" min="0.01" max="0.25" step="0.01" value="${flickerChance}">
+        </div>
+        <div class="inspector-field">
+          <label>Intensity:</label>
+          <input type="range" id="insp-light-intensity" min="0.2" max="5.0" step="0.1" value="${intensity}">
+        </div>
+        <div class="inspector-field">
+          <label>Light Color:</label>
+          <input type="color" id="insp-light-color" value="${color}">
+        </div>
+        <div class="inspector-field">
+          <label>Light Range:</label>
+          <input type="range" id="insp-light-range" min="5" max="35" step="1" value="${range}">
+        </div>
       `;
+
+      inspectorEl.innerHTML = html;
+
+      document.getElementById('insp-light-state')?.addEventListener('change', (e) => {
+        this.updateSelectedLightProperty('state', e.target.value);
+      });
+      document.getElementById('insp-light-flicker')?.addEventListener('change', (e) => {
+        this.updateSelectedLightProperty('flickerEnabled', e.target.checked);
+      });
+      document.getElementById('insp-light-chance')?.addEventListener('input', (e) => {
+        this.updateSelectedLightProperty('flickerChance', parseFloat(e.target.value));
+      });
+      document.getElementById('insp-light-intensity')?.addEventListener('input', (e) => {
+        this.updateSelectedLightProperty('intensity', parseFloat(e.target.value));
+      });
+      document.getElementById('insp-light-color')?.addEventListener('input', (e) => {
+        this.updateSelectedLightProperty('color', e.target.value);
+      });
+      document.getElementById('insp-light-range')?.addEventListener('input', (e) => {
+        this.updateSelectedLightProperty('range', parseFloat(e.target.value));
+      });
+    } else {
+      inspectorEl.innerHTML = html;
+    }
+  }
+
+  updateSelectedLightProperty(prop, value) {
+    if (!this.selectedObject || !this.selectedObject.userData) return;
+    const id = this.selectedObject.userData.id;
+    const item = this.currentLevelData.objects.find(o => o.id === id);
+    if (item) {
+      item[prop] = value;
+      this.selectedObject.userData[prop] = value;
+      this.world.loadLevel(this.currentLevelData);
+      this.onLevelChange(this.currentLevelData);
     }
   }
 
   deselectObject() {
     this.selectedObject = null;
-    this.selectionBox.visible = false;
+    if (this.selectionBox) this.selectionBox.visible = false;
     const inspectorEl = document.getElementById('editor-inspector');
     if (inspectorEl) inspectorEl.innerHTML = `<em>Click an object to select & edit.</em>`;
   }
@@ -163,12 +275,20 @@ export class LevelEditor {
       id: newId,
       type: type,
       x: (Math.random() - 0.5) * 10,
-      y: type === 'light' ? CONFIG.WALL_HEIGHT - 0.15 : (type === 'wall' || type === 'pillar' ? 1.5 : 0.4),
+      y: type === 'light' ? CONFIG.WALL_HEIGHT - 0.05 : (type === 'wall' || type === 'pillar' ? 1.5 : 0.4),
       z: (Math.random() - 0.5) * 10,
       scaleX: type === 'wall' ? 4 : 1.2,
       scaleY: type === 'wall' || type === 'pillar' ? 3 : 1,
       scaleZ: type === 'wall' ? 0.4 : 1.2,
-      rotationY: 0
+      rotationY: 0,
+      ...(type === 'light' ? {
+        flickerEnabled: true,
+        flickerChance: 0.08,
+        intensity: 2.8,
+        color: "#fff5d6",
+        range: 20,
+        state: "NORMAL"
+      } : {})
     };
 
     this.currentLevelData.objects.push(newObj);
@@ -208,7 +328,8 @@ export class LevelEditor {
     if (item) {
       item.rotationY = (item.rotationY || 0) + Math.PI / 4;
       this.world.loadLevel(this.currentLevelData);
-      this.selectObject(this.world.objectsGroup.children.find(c => c.userData.id === id));
+      const reselected = this.world.objectsGroup.children.find(c => c.userData && c.userData.id === id);
+      if (reselected) this.selectObject(reselected);
       this.onLevelChange(this.currentLevelData);
     }
   }
@@ -229,35 +350,49 @@ export class LevelEditor {
   }
 
   saveLevel() {
-    const jsonStr = JSON.stringify(this.currentLevelData, null, 2);
-    localStorage.setItem('the_last_door_saved_level', jsonStr);
+    try {
+      const jsonStr = JSON.stringify(this.currentLevelData, null, 2);
+      localStorage.setItem('the_last_door_saved_level', jsonStr);
 
-    // Download JSON file download trigger
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'the_last_door_level.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    alert('Level configuration saved to LocalStorage & downloaded as JSON!');
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'the_last_door_level.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('Level configuration saved with full atmosphere settings & downloaded as JSON!');
+    } catch (err) {
+      console.error("Failed to save level JSON:", err);
+      alert('Error saving level configuration.');
+    }
   }
 
   loadLevel() {
-    const saved = localStorage.getItem('the_last_door_saved_level');
-    if (saved) {
-      this.currentLevelData = JSON.parse(saved);
-      this.world.loadLevel(this.currentLevelData);
-      this.onLevelChange(this.currentLevelData);
-      alert('Level loaded from LocalStorage!');
-    } else {
-      alert('No saved level found in LocalStorage.');
+    try {
+      const saved = localStorage.getItem('the_last_door_saved_level');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.objects)) {
+          this.currentLevelData = parsed;
+          this.world.loadLevel(this.currentLevelData);
+          this.syncEnvironmentUI();
+          this.onLevelChange(this.currentLevelData);
+          alert('Level loaded from LocalStorage!');
+          return;
+        }
+      }
+      alert('No valid saved level found in LocalStorage.');
+    } catch (err) {
+      console.error("Failed to load level JSON:", err);
+      alert('Error loading level data.');
     }
   }
 
   resetToDefaultLevel() {
     this.currentLevelData = JSON.parse(JSON.stringify(DEFAULT_LEVEL));
     this.world.loadLevel(this.currentLevelData);
+    this.syncEnvironmentUI();
     this.onLevelChange(this.currentLevelData);
   }
 }

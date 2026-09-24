@@ -34,6 +34,13 @@ export class PlayerController {
     this.isLocked = false;
     this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
     
+    // Atmospheric Head Bobbing & Camera Motion
+    this.headBobTimer = 0;
+    this.headBobOffsetY = 0;
+    this.headBobOffsetX = 0;
+    this.inertiaPitch = 0;
+    this.inertiaRoll = 0;
+
     // Footstep Sound Timer
     this.footstepTimer = 0;
 
@@ -45,9 +52,9 @@ export class PlayerController {
   }
 
   initFlashlight() {
-    // 3D SpotLight attached to player camera
-    this.flashlight = new THREE.SpotLight(0xfff5ea, 5.0, 40, Math.PI / 6, 0.4, 1.8);
-    this.flashlight.position.set(0.25, -0.2, 0.1);
+    // 3D SpotLight attached to player camera with soft subtle falloff
+    this.flashlight = new THREE.SpotLight(0xfff5ea, 4.5, 35, Math.PI / 6.5, 0.45, 1.8);
+    this.flashlight.position.set(0.22, -0.18, 0.1);
 
     this.flashlightTarget = new THREE.Object3D();
     this.flashlightTarget.position.set(0, 0, -5);
@@ -136,8 +143,6 @@ export class PlayerController {
 
     // Clamp vertical camera pitch (look up/down limits)
     this.euler.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, this.euler.x));
-
-    this.camera.quaternion.setFromEuler(this.euler);
   }
 
   update(delta) {
@@ -177,7 +182,7 @@ export class PlayerController {
     const moveX = moveVector.x * currentSpeed * delta;
     const moveZ = moveVector.z * currentSpeed * delta;
 
-    // Proposed New Position with Axis-Independent Collision Detection
+    // Axis-Independent Collision Detection
     const newPos = this.position.clone();
 
     // Move X & Check Collision
@@ -196,11 +201,44 @@ export class PlayerController {
       newPos.z = this.position.z;
     }
 
-    // Update Camera Height
-    this.position.y = this.currentHeight;
-    this.camera.position.copy(this.position);
+    // --- ATMOSPHERIC HEAD BOBBING & CAMERA MOTION ---
+    if (isMoving) {
+      const bobSpeedFactor = this.isCrouching ? 6 : (this.isSprinting ? 14 : 9.5);
+      const bobAmpY = this.isCrouching ? 0.015 : (this.isSprinting ? 0.065 : 0.038);
+      const bobAmpX = this.isCrouching ? 0.008 : (this.isSprinting ? 0.035 : 0.020);
 
-    // Footstep Sound Logic
+      this.headBobTimer += delta * bobSpeedFactor;
+      this.headBobOffsetY = Math.sin(this.headBobTimer * 2) * bobAmpY;
+      this.headBobOffsetX = Math.cos(this.headBobTimer) * bobAmpX;
+    } else {
+      // Smooth return to center when stationary
+      this.headBobOffsetY *= (1 - 8 * delta);
+      this.headBobOffsetX *= (1 - 8 * delta);
+    }
+
+    // Inertia Tilt (Subtle tilt when accelerating forward/backward or strafing)
+    const targetInertiaPitch = isMoving ? (this.keys.forward ? -0.015 : (this.keys.backward ? 0.012 : 0)) : 0;
+    const targetInertiaRoll = isMoving ? (this.keys.left ? 0.012 : (this.keys.right ? -0.012 : 0)) : 0;
+    this.inertiaPitch += (targetInertiaPitch - this.inertiaPitch) * 6 * delta;
+    this.inertiaRoll += (targetInertiaRoll - this.inertiaRoll) * 6 * delta;
+
+    // Apply Camera Position & Rotation with Head Bob
+    this.position.y = this.currentHeight;
+    this.camera.position.set(
+      this.position.x + this.headBobOffsetX,
+      this.position.y + this.headBobOffsetY,
+      this.position.z
+    );
+
+    const finalEuler = new THREE.Euler(
+      this.euler.x + this.inertiaPitch,
+      this.euler.y,
+      this.euler.z + this.inertiaRoll,
+      'YXZ'
+    );
+    this.camera.quaternion.setFromEuler(finalEuler);
+
+    // Footstep Sound Logic (Positional & Speed aware)
     if (isMoving) {
       const interval = this.isCrouching ? CONFIG.AUDIO.FOOTSTEP_INTERVAL_CROUCH :
                        (this.isSprinting ? CONFIG.AUDIO.FOOTSTEP_INTERVAL_SPRINT : CONFIG.AUDIO.FOOTSTEP_INTERVAL_WALK);

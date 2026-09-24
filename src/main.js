@@ -1,19 +1,33 @@
+import * as THREE from 'three';
 import { World } from './world.js';
 import { PlayerController } from './player.js';
-import { LevelEditor } from './editor.js';
 import { audioEngine } from './audio.js';
 import { DEFAULT_LEVEL } from './config.js';
+import { AtmospherePostProcessor } from './postprocess.js';
+
+window.THREE = THREE;
 
 class GameApp {
   constructor() {
     this.container = document.getElementById('canvas-container');
-    this.mode = 'PLAY'; // 'PLAY' or 'EDITOR'
     this.activeLevelData = JSON.parse(JSON.stringify(DEFAULT_LEVEL));
     this.hasExited = false;
 
     // Initialize 3D World
     this.world = new World(this.container);
     this.world.loadLevel(this.activeLevelData);
+
+    // Initialize Post Processing Composer
+    this.postProcessor = new AtmospherePostProcessor(
+      this.world.renderer,
+      this.world.scene,
+      this.world.camera
+    );
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+      this.postProcessor.setSize(window.innerWidth, window.innerHeight);
+    });
 
     // Initialize Player Controller
     this.player = new PlayerController(this.world.camera, this.world.renderer.domElement, this.world);
@@ -25,13 +39,7 @@ class GameApp {
       );
     }
 
-    // Initialize Level Editor
-    this.editor = new LevelEditor(this.world, (updatedLevel) => {
-      this.activeLevelData = updatedLevel;
-    });
-
     this.initUI();
-    this.setMode('PLAY');
 
     // Start Game Loop
     this.clock = new THREE.Clock();
@@ -39,28 +47,13 @@ class GameApp {
   }
 
   initUI() {
-    // Mode Switcher Buttons
-    const btnPlayMode = document.getElementById('btn-play-mode');
-    const btnEditorMode = document.getElementById('btn-editor-mode');
+    // User Interaction Audio Init
+    window.addEventListener('click', () => {
+      audioEngine.init();
+      audioEngine.resume();
+    }, { once: true });
 
-    btnPlayMode?.addEventListener('click', () => this.setMode('PLAY'));
-    btnEditorMode?.addEventListener('click', () => this.setMode('EDITOR'));
-
-    // Global Mode Toggle Key (Tab key)
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Tab') {
-        e.preventDefault();
-        this.setMode(this.mode === 'PLAY' ? 'EDITOR' : 'PLAY');
-      }
-    });
-
-    // Exit Screen Buttons
-    document.getElementById('btn-exit-editor')?.addEventListener('click', () => {
-      document.getElementById('exit-modal').style.display = 'none';
-      this.hasExited = false;
-      this.setMode('EDITOR');
-    });
-
+    // Restart Button on Exit Modal
     document.getElementById('btn-exit-restart')?.addEventListener('click', () => {
       document.getElementById('exit-modal').style.display = 'none';
       this.hasExited = false;
@@ -74,67 +67,24 @@ class GameApp {
     });
   }
 
-  setMode(newMode) {
-    this.mode = newMode;
-    const hudPlay = document.getElementById('hud-play');
-    const hudEditor = document.getElementById('hud-editor');
-    const btnPlayMode = document.getElementById('btn-play-mode');
-    const btnEditorMode = document.getElementById('btn-editor-mode');
-
-    if (newMode === 'PLAY') {
-      this.editor.deactivate();
-      if (hudPlay) hudPlay.style.display = 'block';
-      if (hudEditor) hudEditor.style.display = 'none';
-      btnPlayMode?.classList.add('active');
-      btnEditorMode?.classList.remove('active');
-
-      // Set Player Position to Spawn
-      if (this.activeLevelData.playerSpawn) {
-        this.player.setPosition(
-          this.activeLevelData.playerSpawn.x,
-          this.activeLevelData.playerSpawn.y,
-          this.activeLevelData.playerSpawn.z
-        );
-      }
-
-      // Initialize Audio on First User Interaction
-      audioEngine.init();
-      audioEngine.resume();
-    } else {
-      // Release Pointer Lock
-      if (document.pointerLockElement) {
-        document.exitPointerLock();
-      }
-      this.editor.activate();
-      if (hudPlay) hudPlay.style.display = 'none';
-      if (hudEditor) hudEditor.style.display = 'flex';
-      btnPlayMode?.classList.remove('active');
-      btnEditorMode?.classList.add('active');
-    }
-  }
-
   animate() {
     requestAnimationFrame(() => this.animate());
 
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Update World (Lighting & Entities)
-    this.world.update(elapsedTime, delta);
+    // Update World (Lighting, Entities, Atmosphere)
+    this.world.update(elapsedTime, delta, this.player.position);
 
-    if (this.mode === 'PLAY') {
-      // Update Player First Person Controls & Physics
-      this.player.update(delta);
+    // Update Player First Person Controls & Physics
+    this.player.update(delta);
 
-      // Render First Person Camera
-      this.world.renderer.render(this.world.scene, this.world.camera);
+    // Render First Person Camera with Post Processing
+    this.postProcessor.setCamera(this.world.camera);
+    this.postProcessor.render(elapsedTime);
 
-      // Check Exit Condition
-      this.checkExitTrigger();
-    } else {
-      // Render Editor Camera
-      this.world.renderer.render(this.world.scene, this.editor.editorCamera);
-    }
+    // Check Exit Trigger Condition
+    this.checkExitTrigger();
   }
 
   checkExitTrigger() {
@@ -146,16 +96,13 @@ class GameApp {
     if (dist < 2.0) {
       this.hasExited = true;
       if (document.pointerLockElement) {
-        document.exitPointerLock();
+        try { document.exitPointerLock(); } catch (err) {}
       }
-      document.getElementById('exit-modal').style.display = 'flex';
+      const exitModal = document.getElementById('exit-modal');
+      if (exitModal) exitModal.style.display = 'flex';
     }
   }
 }
-
-// Global Three.js import for editor script references
-import * as THREE from 'three';
-window.THREE = THREE;
 
 // Start Application on Load
 window.addEventListener('DOMContentLoaded', () => {

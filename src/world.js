@@ -1,60 +1,87 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { createWallpaperTexture, createCarpetTexture, createCeilingTexture, createLightPanelTexture } from './textures.js';
+import {
+  createWallpaperTexture,
+  createCarpetTexture,
+  createCeilingTexture,
+  createRedDoorTexture,
+  createRedDoorBumpTexture
+} from './textures.js';
 import { EntitySystem } from './entity.js';
+import { LightingManager } from './lighting.js';
+import { AtmosphereManager } from './atmosphere.js';
 
 export class World {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(CONFIG.FOG_COLOR);
-    this.scene.fog = new THREE.FogExp2(CONFIG.FOG_COLOR, 0.04);
 
-    // Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // High Performance Renderer Setup
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      precision: 'mediump'
+    });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.9;
+    this.renderer.toneMappingExposure = 1.05;
     this.container.appendChild(this.renderer.domElement);
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
 
-    // Materials Cache
+    // Atmosphere & Lighting Managers
+    this.atmosphereManager = new AtmosphereManager(this.scene);
+    this.lightingManager = new LightingManager(this.scene);
+
+    // Atmospheric Materials Cache
+    this.wallpaperTex = createWallpaperTexture();
+    this.carpetTex = createCarpetTexture();
+    this.ceilingTex = createCeilingTexture();
+    this.redDoorTex = createRedDoorTexture();
+    this.redDoorBumpTex = createRedDoorBumpTexture();
+
     this.materials = {
       wall: new THREE.MeshStandardMaterial({
-        map: createWallpaperTexture(),
+        map: this.wallpaperTex,
         roughness: 0.85,
-        metalness: 0.05
-      }),
-      floor: new THREE.MeshStandardMaterial({
-        map: createCarpetTexture(),
-        roughness: 0.95,
         metalness: 0.02
       }),
-      ceiling: new THREE.MeshStandardMaterial({
-        map: createCeilingTexture(),
-        roughness: 0.9,
-        metalness: 0.1
+      floor: new THREE.MeshStandardMaterial({
+        map: this.carpetTex,
+        roughness: 0.92,
+        metalness: 0.01
       }),
-      lightPanel: new THREE.MeshBasicMaterial({
-        map: createLightPanelTexture()
+      ceiling: new THREE.MeshStandardMaterial({
+        map: this.ceilingTex,
+        roughness: 0.9,
+        metalness: 0.05
       }),
       pillar: new THREE.MeshStandardMaterial({
-        map: createWallpaperTexture(),
+        map: this.wallpaperTex,
         roughness: 0.85
       }),
-      door: new THREE.MeshStandardMaterial({
-        color: 0x4a3b2c,
-        roughness: 0.7,
-        metalness: 0.2
+      redDoor: new THREE.MeshStandardMaterial({
+        map: this.redDoorTex,
+        bumpMap: this.redDoorBumpTex,
+        bumpScale: 0.03,
+        roughness: 0.75,
+        metalness: 0.12
+      }),
+      doorFrame: new THREE.MeshStandardMaterial({
+        color: 0x3d2b1f,
+        roughness: 0.8,
+        metalness: 0.1
+      }),
+      doorHandle: new THREE.MeshStandardMaterial({
+        color: 0xb59a57,
+        roughness: 0.35,
+        metalness: 0.85
       }),
       prop: new THREE.MeshStandardMaterial({
         color: 0x3d352c,
-        roughness: 0.8
+        roughness: 0.82
       }),
       exit: new THREE.MeshStandardMaterial({
         color: 0x00ff88,
@@ -68,30 +95,23 @@ export class World {
       })
     };
 
-    // World Containers & Bounding Boxes for Collisions
+    // World Containers & Bounding Boxes
     this.objectsGroup = new THREE.Group();
     this.scene.add(this.objectsGroup);
     
-    this.colliders = []; // Array of THREE.Box3 for player collision
-    this.lights = [];    // Array of point lights for flickering effects
+    this.colliders = [];
     this.entitySystem = new EntitySystem(this.scene);
 
-    // Environment Meshes (Floor & Ceiling)
+    // Environment Meshes
     this.floorMesh = null;
     this.ceilingMesh = null;
     this.exitObject = null;
     this.playerSpawnObject = null;
 
-    // Ambient Lighting
-    this.ambientLight = new THREE.AmbientLight(CONFIG.AMBIENT_COLOR, CONFIG.AMBIENT_INTENSITY);
-    this.scene.add(this.ambientLight);
-
-    // Window Resize Handler
     window.addEventListener('resize', () => this.onWindowResize());
   }
 
   buildEnvironment(sizeX = 60, sizeZ = 60) {
-    // Clean old floor & ceiling
     if (this.floorMesh) this.scene.remove(this.floorMesh);
     if (this.ceilingMesh) this.scene.remove(this.ceilingMesh);
 
@@ -99,7 +119,6 @@ export class World {
     const floorGeo = new THREE.PlaneGeometry(sizeX, sizeZ);
     this.floorMesh = new THREE.Mesh(floorGeo, this.materials.floor);
     this.floorMesh.rotation.x = -Math.PI / 2;
-    this.floorMesh.receiveShadow = true;
     this.scene.add(this.floorMesh);
 
     // Ceiling
@@ -108,31 +127,33 @@ export class World {
     this.ceilingMesh.rotation.x = Math.PI / 2;
     this.ceilingMesh.position.y = CONFIG.WALL_HEIGHT;
     this.scene.add(this.ceilingMesh);
+
+    // Generate dense array of square ceiling lights matching the reference image!
+    this.lightingManager.generateCeilingLightGrid(sizeX, sizeZ, 4.0);
   }
 
   loadLevel(levelData) {
-    // Clear previous objects
     while (this.objectsGroup.children.length > 0) {
       const child = this.objectsGroup.children[0];
       this.objectsGroup.remove(child);
     }
     this.colliders = [];
-    this.lights = [];
     this.entitySystem.clear();
 
     this.buildEnvironment(60, 60);
 
-    // Rebuild objects from levelData JSON
+    if (levelData.environment) {
+      this.atmosphereManager.applySettings(levelData.environment);
+    }
+
     levelData.objects.forEach(obj => {
       this.createObjectInWorld(obj);
     });
 
-    // Create Exit Object
     if (levelData.exit) {
       this.createExitObject(levelData.exit.x, levelData.exit.z);
     }
 
-    // Create Player Spawn Indicator
     if (levelData.playerSpawn) {
       this.createPlayerSpawnMarker(levelData.playerSpawn.x, levelData.playerSpawn.z);
     }
@@ -145,53 +166,42 @@ export class World {
       case 'wall': {
         const geo = new THREE.BoxGeometry(data.scaleX || 1, data.scaleY || CONFIG.WALL_HEIGHT, data.scaleZ || 1);
         mesh = new THREE.Mesh(geo, this.materials.wall);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
         break;
       }
       case 'pillar': {
-        const geo = new THREE.BoxGeometry(data.scaleX || 1.2, data.scaleY || CONFIG.WALL_HEIGHT, data.scaleZ || 1.2);
+        const geo = new THREE.BoxGeometry(data.scaleX || 2.2, data.scaleY || CONFIG.WALL_HEIGHT, data.scaleZ || 2.2);
         mesh = new THREE.Mesh(geo, this.materials.pillar);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
         break;
       }
       case 'door': {
         const group = new THREE.Group();
+
         const frameGeo = new THREE.BoxGeometry(1.6, 2.6, 0.2);
-        const frame = new THREE.Mesh(frameGeo, this.materials.door);
+        const frame = new THREE.Mesh(frameGeo, this.materials.doorFrame);
         frame.position.y = 1.3;
         group.add(frame);
+
+        const panelGeo = new THREE.BoxGeometry(1.4, 2.4, 0.12);
+        const panel = new THREE.Mesh(panelGeo, this.materials.redDoor);
+        panel.position.set(0, 1.3, 0.01);
+        group.add(panel);
+
+        const handleGeo = new THREE.SphereGeometry(0.06, 10, 10);
+        const handle = new THREE.Mesh(handleGeo, this.materials.doorHandle);
+        handle.position.set(0.55, 1.2, 0.1);
+        group.add(handle);
+
         mesh = group;
         break;
       }
       case 'light': {
-        const group = new THREE.Group();
-        // Ceiling Fixture Frame
-        const fixGeo = new THREE.BoxGeometry(1.2, 0.1, 0.6);
-        const fixture = new THREE.Mesh(fixGeo, this.materials.lightPanel);
-        fixture.position.y = CONFIG.WALL_HEIGHT - 0.05;
-        group.add(fixture);
-
-        // Point Light Source
-        const pLight = new THREE.PointLight(0xfff5cc, 1.4, 14, 1.8);
-        pLight.position.y = CONFIG.WALL_HEIGHT - 0.25;
-        pLight.castShadow = true;
-        pLight.shadow.mapSize.width = 512;
-        pLight.shadow.mapSize.height = 512;
-        group.add(pLight);
-
-        pLight.userData = { flicker: data.flicker || false, initialIntensity: 1.4 };
-        this.lights.push(pLight);
-
-        mesh = group;
-        break;
+        mesh = this.lightingManager.createLightFixture(data);
+        this.objectsGroup.add(mesh);
+        return;
       }
       case 'prop': {
         const geo = new THREE.BoxGeometry(data.scaleX || 1, data.scaleY || 1, data.scaleZ || 1);
         mesh = new THREE.Mesh(geo, this.materials.prop);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
         break;
       }
       case 'entity_spawn': {
@@ -206,7 +216,6 @@ export class World {
       mesh.userData = { ...data };
       this.objectsGroup.add(mesh);
 
-      // Register collision bounding box if physical object
       if (['wall', 'pillar', 'door', 'prop'].includes(data.type)) {
         const box = new THREE.Box3().setFromObject(mesh);
         this.colliders.push({ box, mesh });
@@ -218,13 +227,11 @@ export class World {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
 
-    // Glowing Exit Door Portal Frame
     const doorGeo = new THREE.BoxGeometry(1.8, 2.8, 0.3);
     const door = new THREE.Mesh(doorGeo, this.materials.exit);
     door.position.y = 1.4;
     group.add(door);
 
-    // Glowing PointLight
     const exitLight = new THREE.PointLight(0x00ff88, 2.0, 8);
     exitLight.position.y = 1.4;
     group.add(exitLight);
@@ -237,7 +244,7 @@ export class World {
   createPlayerSpawnMarker(x, z) {
     if (this.playerSpawnObject) this.scene.remove(this.playerSpawnObject);
 
-    const geo = new THREE.CylinderGeometry(0.5, 0.5, 1.7, 12);
+    const geo = new THREE.CylinderGeometry(0.5, 0.5, 1.7, 10);
     const marker = new THREE.Mesh(geo, this.materials.spawnMarker);
     marker.position.set(x, 0.85, z);
     marker.userData = { type: 'playerSpawn' };
@@ -245,17 +252,9 @@ export class World {
     this.playerSpawnObject = marker;
   }
 
-  update(time, delta) {
-    // Update Flickering Fluorescent Lights
-    this.lights.forEach(light => {
-      if (light.userData.flicker && Math.random() < 0.08) {
-        light.intensity = Math.random() < 0.3 ? 0.1 : light.userData.initialIntensity * (0.4 + Math.random() * 0.8);
-      } else {
-        light.intensity = light.userData.initialIntensity;
-      }
-    });
-
-    // Update Entities
+  update(time, delta, playerPos) {
+    this.atmosphereManager.update(delta);
+    this.lightingManager.update(delta, playerPos);
     this.entitySystem.update(time);
   }
 
@@ -263,5 +262,6 @@ export class World {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
   }
 }
